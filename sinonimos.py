@@ -1,23 +1,34 @@
+import streamlit as st
 import requests
 
 def obter_sinonimos(palavra):
     url = "https://api.datamuse.com/words"
     params = {
-        "rel_syn": palavra,  # sinónimos
-        "max": 10  # número máximo de resultados
+        "rel_syn": palavra,
+        "max": 10
     }
     resposta = requests.get(url, params=params)
-    
+
     if resposta.status_code == 200:
         dados = resposta.json()
         return [item["word"] for item in dados]
     else:
-        print(f"Erro ao aceder à API: {resposta.status_code}")
+        st.error(f"Erro ao aceder à API: {resposta.status_code}")
         return []
 
-# Exemplo de uso
-palavras = ["feliz", "rápido", "inteligente"]
+# Interface Streamlit
+st.title("Descobre Sinónimos")
+st.write("Insere uma palavra para obter possíveis sinónimos (via Datamuse API).")
 
-for palavra in palavras:
-    sinonimos = obter_sinonimos(palavra)
-    print(f"Sinónimos de '{palavra}': {', '.join(sinonimos) if sinonimos else 'Nenhum encontrado.'}")
+palavra = st.text_input("Palavra:", "")
+
+if st.button("Procurar Sinónimos"):
+    if palavra.strip() != "":
+        sinonimos = obter_sinonimos(palavra.strip())
+        if sinonimos:
+            st.success(f"Sinónimos de '{palavra}':")
+            st.write(", ".join(sinonimos))
+        else:
+            st.warning("Nenhum sinónimo encontrado.")
+    else:
+        st.warning("Por favor, insere uma palavra válida.")
