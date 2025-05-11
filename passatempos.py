@@ -105,50 +105,41 @@ with tabs[1]:
         
     with tabs[2]:
         
-        st.title("🔠 Gerador de Combinações e Permutações de Letras")
+        import streamlit as st
+        import itertools
+        import requests
 
-        letras_input = st.text_input("Digite as letras que deseja usar:", max_chars=20)
-        tipo_operacao = st.radio("Tipo de operação:", ["Combinações (ordem não importa)", "Permutações (ordem importa)"])
+        def validar_palavra(palavra):
+            """Verifica se a palavra existe na língua (via API Datamuse)"""
+            url = "https://api.datamuse.com/words"
+            params = {"sp": palavra, "max": 1}
+            resposta = requests.get(url, params=params)
+            if resposta.status_code == 200:
+                resultados = resposta.json()
+                return any(item["word"] == palavra for item in resultados)
+            return False
 
-        usar_tamanho_especifico = st.checkbox("Usar tamanho específico")
-        if usar_tamanho_especifico:
-            tamanho = st.number_input("Tamanho das combinações/permuntações:", min_value=1, max_value=len(letras_input), step=1)
-        else:
-            tamanho = None
+        def gerar_palavras_validas(letras, tamanho):
+            """Gera permutações com letras repetidas e filtra por palavras reais"""
+            letras = letras.lower()
+            todas = set(''.join(p) for p in itertools.permutations(letras, tamanho))
+            palavras_validas = [p for p in todas if validar_palavra(p)]
+            return palavras_validas
 
-        def gerar_combinacoes_letras(letras, tamanho=None):
-            todas_combinacoes = []
-            if tamanho is not None:
-                combinacoes = itertools.combinations(letras, tamanho)
-                todas_combinacoes = [''.join(c) for c in combinacoes]
-            else:
-                for i in range(1, len(letras) + 1):
-                    combinacoes = itertools.combinations(letras, i)
-                    todas_combinacoes.extend(''.join(c) for c in combinacoes)
-            return todas_combinacoes
-
-        def gerar_permutacoes_letras(letras, tamanho=None):
-            todas_permutacoes = []
-            if tamanho is not None:
-                permutacoes = itertools.permutations(letras, tamanho)
-                todas_permutacoes = [''.join(p) for p in permutacoes]
-            else:
-                for i in range(1, len(letras) + 1):
-                    permutacoes = itertools.permutations(letras, i)
-                    todas_permutacoes.extend(''.join(p) for p in permutacoes)
-            return todas_permutacoes
+        # Interface Streamlit
+        st.title("🧩 Gerador de Palavras Válidas com Letras Repetidas")
+        letras_input = st.text_input("Insere letras (pode repetir):", value="rarroc")
 
         if letras_input:
-            letras = ''.join(dict.fromkeys(letras_input.replace(" ", "")))
-            st.markdown(f"**Letras únicas consideradas:** {letras}")
+            tamanho = st.number_input("Tamanho da palavra:", min_value=1, max_value=len(letras_input), step=1)
 
-            if tipo_operacao.startswith("Combina"):
-                resultado = gerar_combinacoes_letras(letras, tamanho)
-                st.success(f"Foram geradas {len(resultado)} combinações.")
-            else:
-                resultado = gerar_permutacoes_letras(letras, tamanho)
-                st.success(f"Foram geradas {len(resultado)} permutações.")
+            if st.button("🔍 Gerar Palavras"):
+                st.info("A procurar palavras válidas...")
+                resultado = gerar_palavras_validas(letras_input, tamanho)
+                
+                if resultado:
+                    st.success(f"Encontradas {len(resultado)} palavra(s):")
+                    st.markdown(", ".join(sorted(resultado)))
+                else:
+                    st.warning("Nenhuma palavra real encontrada com essas letras.")
 
-            st.write("### Resultados:")
-            for i, item in enumerate(resultado, 1):
-                st.write(f"{i}. {item}")
