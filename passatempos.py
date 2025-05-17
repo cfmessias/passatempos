@@ -3,7 +3,7 @@ import requests
 import itertools
 from bs4 import BeautifulSoup
 
-tabs = st.tabs(["Cruzadas", "Sinonimos","WOW"])
+tabs = st.tabs(["Cruzadas", "Sinonimos", "WOW", "Sudoku X-Wing"])
 
 with tabs[0]:
     def obter_sinonimos(palavra, num_letras=None):
@@ -112,8 +112,8 @@ with tabs[1]:
 
     # Interface
     st.title("🔠 Ajuda para Palavras Cruzadas")
-    palavra = st.text_input("Palavra de referência:")
-    num_letras = st.number_input("Número de letras (opcional):", min_value=1, max_value=30, step=1, format="%d", value=None)
+    palavra = st.text_input("Palavra de referência:", key="sin_palavra")
+    num_letras = st.number_input("Número de letras (opcional):", min_value=1, max_value=30, step=1, format="%d", value=None, key="sin_num_letras")
 
     if st.button("🔍 Procurar sinónimos"):
         if palavra.strip():
@@ -132,40 +132,347 @@ with tabs[1]:
         else:
             st.warning("Por favor, insere uma palavra válida.")
 
-    with tabs[2]:
+with tabs[2]:
+    def validar_palavra(palavra):
+        """Verifica se a palavra existe na língua (via API Datamuse)"""
+        url = "https://api.datamuse.com/words"
+        params = {"sp": palavra, "max": 1}
+        resposta = requests.get(url, params=params)
+        if resposta.status_code == 200:
+            resultados = resposta.json()
+            return any(item["word"] == palavra for item in resultados)
+        return False
+
+    def gerar_palavras_validas(letras, tamanho):
+        """Gera permutações com letras repetidas e filtra por palavras reais"""
+        letras = letras.lower()
+        todas = set(''.join(p) for p in itertools.permutations(letras, tamanho))
+        palavras_validas = [p for p in todas if validar_palavra(p)]
+        return palavras_validas
+
+    # Interface Streamlit
+    st.title("🧩 Gerador de Palavras Válidas com Letras Repetidas")
+    letras_input = st.text_input("Insere letras (pode repetir):", value="rarroc")
+
+    if letras_input:
+        tamanho = st.number_input("Tamanho da palavra:", min_value=1, max_value=len(letras_input), step=1)
+
+        if st.button("🔍 Gerar Palavras"):
+            st.info("A procurar palavras válidas...")
+            resultado = gerar_palavras_validas(letras_input, tamanho)
+            
+            if resultado:
+                st.success(f"Encontradas {len(resultado)} palavra(s):")
+                st.markdown(", ".join(sorted(resultado)))
+            else:
+                st.warning("Nenhuma palavra real encontrada com essas letras.")
+
+with tabs[3]:
+    st.title("🧩 Sudoku X-Wing Solver")
+    st.markdown("""
+    Esta ferramenta ajuda a identificar e aplicar a técnica X-Wing em quebra-cabeças de Sudoku.
+    
+    **O que é X-Wing?** 
+    É uma técnica de resolução onde um número candidato aparece exatamente em duas células em cada uma
+    de duas linhas diferentes, e essas células estão nas mesmas colunas. Isto permite eliminar esse número
+    de outras células nas mesmas colunas.
+    """)
+    
+    def find_x_wings(grid):
+        """
+        Identifica padrões X-Wing em um grid de Sudoku e retorna as eliminações possíveis.
         
+        Args:
+            grid: Uma matriz 9x9 onde cada célula contém um número de 1-9 se resolvida
+                ou uma lista de candidatos possíveis se não resolvida
         
-        def validar_palavra(palavra):
-            """Verifica se a palavra existe na língua (via API Datamuse)"""
-            url = "https://api.datamuse.com/words"
-            params = {"sp": palavra, "max": 1}
-            resposta = requests.get(url, params=params)
-            if resposta.status_code == 200:
-                resultados = resposta.json()
-                return any(item["word"] == palavra for item in resultados)
-            return False
-
-        def gerar_palavras_validas(letras, tamanho):
-            """Gera permutações com letras repetidas e filtra por palavras reais"""
-            letras = letras.lower()
-            todas = set(''.join(p) for p in itertools.permutations(letras, tamanho))
-            palavras_validas = [p for p in todas if validar_palavra(p)]
-            return palavras_validas
-
-        # Interface Streamlit
-        st.title("🧩 Gerador de Palavras Válidas com Letras Repetidas")
-        letras_input = st.text_input("Insere letras (pode repetir):", value="rarroc")
-
-        if letras_input:
-            tamanho = st.number_input("Tamanho da palavra:", min_value=1, max_value=len(letras_input), step=1)
-
-            if st.button("🔍 Gerar Palavras"):
-                st.info("A procurar palavras válidas...")
-                resultado = gerar_palavras_validas(letras_input, tamanho)
+        Returns:
+            Uma lista de eliminações no formato [(linha, coluna, valor), ...]
+        """
+        eliminations = []
+        
+        # Verifica X-Wings nas linhas
+        for num in range(1, 10):
+            # Para cada valor possível (1-9)
+            for line1 in range(9):
+                # Encontrar colunas onde o número aparece como candidato nesta linha
+                cols_with_num = [col for col in range(9) if isinstance(grid[line1][col], list) and num in grid[line1][col]]
                 
-                if resultado:
-                    st.success(f"Encontradas {len(resultado)} palavra(s):")
-                    st.markdown(", ".join(sorted(resultado)))
-                else:
-                    st.warning("Nenhuma palavra real encontrada com essas letras.")
+                # Precisamos de exatamente 2 posições para um X-Wing
+                if len(cols_with_num) == 2:
+                    for line2 in range(line1 + 1, 9):
+                        # Procurar outra linha onde o número aparece nas mesmas colunas
+                        cols_line2 = [col for col in range(9) if isinstance(grid[line2][col], list) and num in grid[line2][col]]
+                        
+                        # Se encontramos um padrão X-Wing
+                        if cols_line2 == cols_with_num:
+                            # Podemos eliminar este número de outras células nas mesmas colunas
+                            col1, col2 = cols_with_num
+                            
+                            # Verificar todas as outras células nas colunas col1 e col2
+                            for row in range(9):
+                                if row != line1 and row != line2:
+                                    # Coluna 1
+                                    if isinstance(grid[row][col1], list) and num in grid[row][col1]:
+                                        eliminations.append((row, col1, num))
+                                    # Coluna 2
+                                    if isinstance(grid[row][col2], list) and num in grid[row][col2]:
+                                        eliminations.append((row, col2, num))
+        
+        # Verifica X-Wings nas colunas
+        for num in range(1, 10):
+            # Para cada valor possível (1-9)
+            for col1 in range(9):
+                # Encontrar linhas onde o número aparece como candidato nesta coluna
+                rows_with_num = [row for row in range(9) if isinstance(grid[row][col1], list) and num in grid[row][col1]]
+                
+                # Precisamos de exatamente 2 posições para um X-Wing
+                if len(rows_with_num) == 2:
+                    for col2 in range(col1 + 1, 9):
+                        # Procurar outra coluna onde o número aparece nas mesmas linhas
+                        rows_col2 = [row for row in range(9) if isinstance(grid[row][col2], list) and num in grid[row][col2]]
+                        
+                        # Se encontramos um padrão X-Wing
+                        if rows_col2 == rows_with_num:
+                            # Podemos eliminar este número de outras células nas mesmas linhas
+                            row1, row2 = rows_with_num
+                            
+                            # Verificar todas as outras células nas linhas row1 e row2
+                            for col in range(9):
+                                if col != col1 and col != col2:
+                                    # Linha 1
+                                    if isinstance(grid[row1][col], list) and num in grid[row1][col]:
+                                        eliminations.append((row1, col, num))
+                                    # Linha 2
+                                    if isinstance(grid[row2][col], list) and num in grid[row2][col]:
+                                        eliminations.append((row2, col, num))
+        
+        return eliminations
 
+    def apply_x_wing(grid):
+        """
+        Aplica a técnica X-Wing ao grid de Sudoku.
+        
+        Args:
+            grid: Uma matriz 9x9 onde cada célula contém um número de 1-9 se resolvida
+                ou uma lista de candidatos possíveis se não resolvida
+        
+        Returns:
+            Um booleano indicando se alguma eliminação foi feita
+            O grid modificado
+        """
+        eliminations = find_x_wings(grid)
+        
+        if eliminations:
+            # Aplicar as eliminações
+            for row, col, val in eliminations:
+                grid[row][col].remove(val)
+            return True, grid
+        
+        return False, grid
+
+    def parse_sudoku(board_str):
+        """
+        Converte uma string representando um tabuleiro de Sudoku em uma matriz 9x9.
+        Células vazias são representadas por '0' ou '.'.
+        
+        Args:
+            board_str: String representando o tabuleiro de Sudoku
+        
+        Returns:
+            Uma matriz 9x9 representando o tabuleiro de Sudoku
+        """
+        # Remover espaços em branco e caracteres de nova linha
+        board_str = ''.join(c for c in board_str if c not in ' \n\t')
+        
+        # Substituir pontos por zeros
+        board_str = board_str.replace('.', '0')
+        
+        # Verificar se o tabuleiro tem 81 caracteres
+        if len(board_str) != 81:
+            return None
+        
+        # Converter para matriz 9x9
+        board = []
+        for i in range(9):
+            row = []
+            for j in range(9):
+                cell = int(board_str[i*9 + j])
+                # Se a célula estiver vazia, inicializar com todos os candidatos possíveis
+                if cell == 0:
+                    row.append(list(range(1, 10)))
+                else:
+                    row.append(cell)
+            board.append(row)
+        
+        return board
+
+    def fill_candidates(grid):
+        """
+        Preenche as células vazias com candidatos possíveis com base nas regras do Sudoku.
+        
+        Args:
+            grid: Uma matriz 9x9 representando o tabuleiro de Sudoku
+        
+        Returns:
+            Uma matriz 9x9 com candidatos preenchidos
+        """
+        # Para cada célula não resolvida
+        for row in range(9):
+            for col in range(9):
+                if isinstance(grid[row][col], list):
+                    # Obter valores já usados na linha, coluna e bloco 3x3
+                    used_values = set()
+                    
+                    # Verificar linha
+                    for c in range(9):
+                        if isinstance(grid[row][c], int):
+                            used_values.add(grid[row][c])
+                    
+                    # Verificar coluna
+                    for r in range(9):
+                        if isinstance(grid[r][col], int):
+                            used_values.add(grid[r][col])
+                    
+                    # Verificar bloco 3x3
+                    block_row, block_col = 3 * (row // 3), 3 * (col // 3)
+                    for r in range(block_row, block_row + 3):
+                        for c in range(block_col, block_col + 3):
+                            if isinstance(grid[r][c], int):
+                                used_values.add(grid[r][c])
+                    
+                    # Atualizar candidatos
+                    grid[row][col] = [n for n in range(1, 10) if n not in used_values]
+        
+        return grid
+
+    # Interface Streamlit para Sudoku
+    st.subheader("Insira seu tabuleiro de Sudoku")
+    st.markdown("""
+    Insira o tabuleiro no formato de string, usando '.' ou '0' para células vazias.
+    Exemplo:
+    ```
+    .....9.7.
+    ..7...9..
+    9..287..3
+    .8.154.3.
+    ...8.3...
+    .5.967.8.
+    3..571..6
+    ..5...1..
+    .7.3.....
+    ```
+    """)
+    
+    # Exemplo de Sudoku com X-Wing
+    exemplo = """.....9.7.
+    ..7...9..
+    9..287..3
+    .8.154.3.
+    ...8.3...
+    .5.967.8.
+    3..571..6
+    ..5...1..
+    .7.3....."""
+    
+    sudoku_input = st.text_area("Tabuleiro de Sudoku:", value=exemplo, height=250)
+    
+    if st.button("Analisar X-Wing"):
+        if sudoku_input:
+            # Processar o tabuleiro
+            grid = parse_sudoku(sudoku_input)
+            
+            if grid:
+                # Preencher candidatos
+                grid = fill_candidates(grid)
+                
+                # Exibir tabuleiro original
+                st.subheader("Tabuleiro Original")
+                tabuleiro_html = "<table style='border-collapse: collapse; font-size: 18px; margin: 0 auto;'>"
+                for i in range(9):
+                    if i % 3 == 0 and i > 0:
+                        tabuleiro_html += "<tr><td colspan='9'><hr style='border: 2px solid black'></td></tr>"
+                    tabuleiro_html += "<tr>"
+                    for j in range(9):
+                        if j % 3 == 0 and j > 0:
+                            tabuleiro_html += "<td style='border: none; padding: 0 5px;'>|</td>"
+                        cell = grid[i][j]
+                        if isinstance(cell, int):
+                            tabuleiro_html += f"<td style='width: 30px; height: 30px; text-align: center;'>{cell}</td>"
+                        else:
+                            tabuleiro_html += "<td style='width: 30px; height: 30px; text-align: center;'>.</td>"
+                    tabuleiro_html += "</tr>"
+                tabuleiro_html += "</table>"
+                st.markdown(tabuleiro_html, unsafe_allow_html=True)
+                
+                # Encontrar padrões X-Wing
+                eliminations = find_x_wings(grid)
+                
+                if eliminations:
+                    st.success(f"Encontrados {len(eliminations)} candidatos que podem ser eliminados usando X-Wing!")
+                    
+                    # Mostrar padrões encontrados
+                    st.subheader("Padrões X-Wing Encontrados")
+                    patterns = {}
+                    for row, col, val in eliminations:
+                        if val not in patterns:
+                            patterns[val] = []
+                        patterns[val].append((row, col))
+                    
+                    for num, positions in patterns.items():
+                        st.markdown(f"**Número {num}** pode ser eliminado das células:")
+                        pos_text = ", ".join([f"({r+1},{c+1})" for r, c in positions])
+                        st.markdown(pos_text)
+                    
+                    # Aplicar X-Wing
+                    applied, updated_grid = apply_x_wing(grid)
+                    
+                    if applied:
+                        st.subheader("Candidatos Após Aplicar X-Wing")
+                        cand_html = "<table style='border-collapse: collapse; font-size: 12px; margin: 0 auto;'>"
+                        for i in range(9):
+                            if i % 3 == 0 and i > 0:
+                                cand_html += "<tr><td colspan='9'><hr style='border: 2px solid black'></td></tr>"
+                            cand_html += "<tr>"
+                            for j in range(9):
+                                if j % 3 == 0 and j > 0:
+                                    cand_html += "<td style='border: none; padding: 0 5px;'>|</td>"
+                                cell = updated_grid[i][j]
+                                if isinstance(cell, int):
+                                    cand_html += f"<td style='width: 40px; height: 40px; text-align: center; vertical-align: middle;'>{cell}</td>"
+                                else:
+                                    cand_text = "".join([str(n) for n in cell])
+                                    cand_html += f"<td style='width: 40px; height: 40px; text-align: center; vertical-align: middle; font-size: 9px;'>{cand_text}</td>"
+                            cand_html += "</tr>"
+                        cand_html += "</table>"
+                        st.markdown(cand_html, unsafe_allow_html=True)
+                else:
+                    st.warning("Nenhum padrão X-Wing encontrado neste quebra-cabeça.")
+            else:
+                st.error("Formato de tabuleiro inválido. Certifique-se de que ele tenha 81 caracteres.")
+        else:
+            st.warning("Por favor, insira um tabuleiro de Sudoku.")
+    
+    # Explicação da técnica X-Wing
+    with st.expander("Explicação da Técnica X-Wing"):
+        st.markdown("""
+        ## Como Funciona o X-Wing
+        
+        1. **Conceito Básico**: Um X-Wing ocorre quando um determinado número candidato aparece exatamente em duas células em cada uma de duas linhas diferentes, e essas células estão nas mesmas colunas.
+        
+        2. **Exemplo Visual**:
+           - Imagine que o número 7 aparece como candidato apenas em duas células da linha 2 (nas colunas 3 e 6)
+           - E o número 7 também aparece como candidato apenas em duas células da linha 8 (nas mesmas colunas 3 e 6)
+           - Isso forma um retângulo com os quatro cantos nas posições: (2,3), (2,6), (8,3) e (8,6)
+        
+        3. **A Lógica**:
+           - Em cada uma dessas duas linhas, o número 7 DEVE ir em uma dessas duas posições
+           - Portanto, nas colunas 3 e 6, o número 7 DEVE ocupar as linhas 2 e 8
+           - Isto significa que o número 7 não pode aparecer em NENHUMA outra posição nas colunas 3 e 6
+        
+        4. **X-Wing por Coluna**:
+           - O mesmo padrão pode ocorrer em colunas (em vez de linhas)
+           - Quando um número aparece exatamente em duas células em cada uma de duas colunas
+           - E essas células estão nas mesmas linhas
+           - Você pode eliminar esse número de todas as outras células nessas linhas
+        """)
