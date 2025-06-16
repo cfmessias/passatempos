@@ -3,8 +3,7 @@ import itertools
 import requests
 from functools import lru_cache
 
-st.set_page_config(page_title="Gerador de Palavras Válidas", page_icon="🧩")
-
+st.markdown("<h4 style='margin-bottom: 0.5em;'>🧩 Gerador de Palavras Válidas com Letras Repetidas (PT)</h4>", unsafe_allow_html=True)
 @lru_cache(maxsize=2048)
 def validar_datamuse(palavra):
     """Valida palavra usando Datamuse API."""
